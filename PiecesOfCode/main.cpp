@@ -1,17 +1,28 @@
 #include <stdint.h>
 #include <vector>
 #include <fstream>
+#include <iostream>
 
-const int WIDTH = 2;
-const int HEIGHT = 2;
+const int WIDTH = 2;	// 1280
+const int HEIGHT = 2;	// 720
 
-void imageToPPM(char image[WIDTH * HEIGHT * 3])
+void writePPM(char image[WIDTH * HEIGHT * 3], std::string name)
 {
 	std::ofstream ppm;
-	ppm.open("image.ppm", std::ios::binary);
-	ppm << "P6" << " " << WIDTH << " " << HEIGHT << " " << "255" << "\n";
+	ppm.open(name, std::ios::binary);
+	ppm << "P6" << " " << WIDTH << " " << HEIGHT << " " << "255" << '\n';
 	size_t size = WIDTH * HEIGHT * 3;
 	ppm.write(image, size);
+	ppm.close();
+}
+
+void readPPM(char image[WIDTH * HEIGHT * 3], std::string name)
+{
+	std::ifstream ppm;
+	ppm.open(name, std::ios::binary);
+	while (ppm.get() != '\n');
+	size_t size = WIDTH * HEIGHT * 3;
+	ppm.read(image, size);
 	ppm.close();
 }
 
@@ -41,19 +52,8 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*> grap
 int main()
 {
 	char* image = new char[WIDTH * HEIGHT * 3];
-	image[0] = 100;
-	image[1] = 200;
-	image[2] = 255;
-	image[3] = 100;
-	image[4] = 200;
-	image[5] = 255;
-	image[6] = 100;
-	image[7] = 200;
-	image[8] = 255;
-	image[9] = 10;
-	image[10] = 20;
-	image[11] = 255;
-	imageToPPM(image);
+	readPPM(image, "image.ppm");
+	writePPM(image, "copy.ppm");
 
 	return 0;
 }
