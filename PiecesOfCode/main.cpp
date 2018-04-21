@@ -105,7 +105,6 @@ gotTip:
 	image[(y * WIDTH + x) * 3] = 0;
 	std::queue<coord> points;
 	points.push(coord(x, y));
-	int s = 0;
 
 	while (!points.empty())
 	{
@@ -195,20 +194,8 @@ gotTip:
 		}
 
 		image[index + 1] = 0;
-		++s;
-		/*
-		if (s % 100 == 0)
-		{
-			std::stringstream ss;
-			ss << "test_hands/f" << s / 100 << ".ppm";
-			write_PPM(image, ss.str());
-			std::cout << "Wrote " << s / 100 << std::endl;
-			std::cin.ignore();
-		}
-		*/
 	}
 
-	std::cout << s << std::endl;
 	xpos = x, ypos = y;
 	image[(y * WIDTH + x) * 3] = image[(y * WIDTH + x) * 3 + 1] = image[(y * WIDTH + x) * 3 + 2] = 255;
 }
@@ -222,16 +209,14 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 
 	// Complex subtraction
 	char* sub = new char[IMAGE_SIZE];
-	int index;
 	int w = 2, h = 2;
-	int minr, ming, minb, min;
 	for (unsigned int i = w; i < HEIGHT - w; ++i)
 	{
 		for (unsigned int j = h; j < WIDTH - h; ++j)
 		{
-			index = (i * WIDTH + j) * 3;
-			min = 765;	// 255 * 3
-			minr = ming = minb = 255;
+			int index = (i * WIDTH + j) * 3;
+			int min = 765;	// 255 * 3
+			int minr = 255, ming = 255, minb = 255;
 			for (int k = -w; k <= w; ++k)
 			{
 				for (int l = -h; l <= h; ++l)
@@ -297,7 +282,7 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	{
 		for (unsigned int j = 1; j < WIDTH - 1; ++j)
 		{
-			index = (i * WIDTH + j) * 3;
+			int index = (i * WIDTH + j) * 3;
 			
 			if (image[index] + image[index + 1] + image[index + 2] == 0)
 			{
@@ -320,7 +305,7 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 		{
 			for (unsigned int j = h; j < WIDTH - h; ++j)
 			{
-				index = (i * WIDTH + j) * 3;
+				int index = (i * WIDTH + j) * 3;
 				setPixel(fill, index, 0);
 
 				for (int k = -w; k <= w; ++k)
@@ -433,179 +418,6 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	std::cout << x << ", " << y << std::endl;
 	write_PPM(image, "test_hands/f2.ppm");
 	std::cin.ignore();
-
-	/*
-	// Create vector field
-	int* vec = new int[WIDTH * HEIGHT * 2];
-	int vecIndex, dist, diagDist;
-	float diag;
-	for (int i = 0; i < HEIGHT; ++i)
-	{
-		for (int j = 0; j < WIDTH; ++j)
-		{	
-			index = (i * WIDTH + j) * 3;
-			vecIndex = (i * WIDTH + j) * 2;
-
-			if (!image[index])
-			{
-				vec[vecIndex] = 0;
-				vec[vecIndex + 1] = 0;
-				continue;
-			}
-
-			diag = SQRT2_RECIP;
-			dist = diagDist = 1;
-			bool flag = false;
-			while (!flag && dist < WIDTH + HEIGHT)
-			{
-				// Right
-				if (dist + j < WIDTH)
-				{
-					if (!image[index + 3 * dist])
-					{
-						vec[vecIndex] = dist;
-						vec[vecIndex + 1] = 0;
-						flag = true;
-					}
-				}
-
-				if (diagDist + j < WIDTH)
-				{
-					// Right-Down
-					if (diagDist + i < HEIGHT)
-					{
-						if (!image[index + 3 * diagDist * (WIDTH + 1)])
-						{
-							vec[vecIndex] = diagDist;
-							vec[vecIndex + 1] = diagDist;
-							flag = true;
-						}
-					}
-
-					// Right-Up
-					if (i - diagDist > 0)
-					{
-						if (!image[index - 3 * diagDist * (WIDTH - 1)])
-						{
-							vec[vecIndex] = diagDist;
-							vec[vecIndex + 1] = -diagDist;
-							flag = true;
-						}
-					}
-				}
-
-				// Left
-				if (j - dist > 0)
-				{
-					if (!image[index - 3 * dist])
-					{
-						vec[vecIndex] = -dist;
-						vec[vecIndex + 1] = 0;
-						flag = true;
-					}
-				}
-
-				if (j - diagDist > 0)
-				{
-					// Left-Down
-					if (diagDist + i < HEIGHT)
-					{
-						if (!image[index + 3 * diagDist * (WIDTH - 1)])
-						{
-							vec[vecIndex] = -diagDist;
-							vec[vecIndex + 1] = diagDist;
-							flag = true;
-						}
-					}
-
-					// Left-Up
-					if (i - diagDist > 0)
-					{
-						if (!image[index - 3 * diagDist * (WIDTH + 1)])
-						{
-							vec[vecIndex] = -diagDist;
-							vec[vecIndex + 1] = -diagDist;
-							flag = true;
-						}
-					}
-				}
-				
-				// Down
-				if (dist + i < HEIGHT)
-				{
-					if (!image[index + 3 * dist * WIDTH])
-					{
-						vec[vecIndex] = 0;
-						vec[vecIndex + 1] = dist;
-						flag = true;
-					}
-				}
-
-				// Up
-				if (i - dist > 0)
-				{
-					if (!image[index - 3 * dist * WIDTH])
-					{
-						vec[vecIndex] = 0;
-						vec[vecIndex + 1] = -dist;
-						flag = true;
-					}
-				}
-				
-				++dist;
-				diag += SQRT2_RECIP;
-				diagDist = (int)diag;
-			}
-		}
-	}
-
-	// Calculate derivative of vector field
-	int* grad = new int[WIDTH * HEIGHT * 2];
-	for (unsigned int i = 1; i < HEIGHT - 1; ++i)
-	{
-		for (unsigned int j = 1; j < WIDTH - 1; ++j)
-		{
-			int dx = 0, dy = 0;
-			int index = (i * WIDTH + j) * 2;
-			
-			dx += vec[index + 2] + SQRT2_RECIP * (vec[index - WIDTH * 2 + 2] + vec[index + WIDTH * 2 + 2]);
-			dx -= vec[index - 2] + SQRT2_RECIP * (vec[index - WIDTH * 2 - 2] + vec[index + WIDTH * 2 - 2]);
-			dy += vec[index + WIDTH * 2 + 1] + SQRT2_RECIP * (vec[index + WIDTH * 2 - 1] + vec[index + WIDTH * 2 + 3]);
-			dy -= vec[index - WIDTH * 2 + 1] + SQRT2_RECIP * (vec[index - WIDTH * 2 - 1] + vec[index - WIDTH * 2 + 3]);
-
-			//float mag = 1.0 / std::sqrt(vec[index] * vec[index] + vec[index + 1] * vec[index + 1]);
-			float mag = 3;
-			grad[index] = dx * mag;
-			grad[index + 1] = dy * mag;
-		}
-	}
-
-	delete vec;
-
-	for (unsigned int i = 0; i < WIDTH; ++i)
-	{
-		grad[2 * i] = grad[2 * i + 1] = 0;
-		grad[(WIDTH * HEIGHT - i - 1) * 2] = grad[(WIDTH * HEIGHT - i - 1) * 2 + 1] = 0;
-	}
-
-	for (unsigned int i = 0; i < HEIGHT; ++i)
-	{
-		grad[i * WIDTH * 2] = grad[i * WIDTH * 2 + 1] = 0;
-		grad[(i + 1) * WIDTH * 2 - 2] = grad[(i + 1) * WIDTH * 2 - 1] = 0;
-	}
-
-	// Write divergence scalar field image
-	for (unsigned int i = 0; i < WIDTH * HEIGHT; ++i)
-	{		
-		int div = grad[i * 2] + grad[i * 2 + 1];
-		image[i * 3] = div > 0 ? div : -div;
-		image[i * 3 + 1] = image[i * 3 + 2] = 0;
-	}
-
-	write_PPM(image, "test_hands/divergence.ppm");
-	
-	delete grad;
-	*/
 
 	delete image;
 }
