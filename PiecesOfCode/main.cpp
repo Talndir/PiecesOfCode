@@ -4,6 +4,7 @@
 #include <iostream>
 #include <queue>
 #include <sstream>
+#include <map>
 
 #define SQRT2_RECIP 0.70710678118
 
@@ -54,7 +55,51 @@ struct coord
 {
 	int x;
 	int y;
+	coord() : x(0), y(0) {};
 	coord(int x_, int y_) : x(x_), y(y_) {};
+};
+
+struct edge
+{
+	coord a, b;
+	int p1, p2;
+	int v1 = 0, v2 = 0;
+	int index;
+	float nx, ny;
+
+	edge()
+	{
+		edge(0, 0, 0);
+	};
+
+	edge(int p1_, int p2_, int index_) : p1(p1_), p2(p2_), index(index_)
+	{
+		a = coord(p1 % WIDTH, p1 / WIDTH);
+		b = coord(p2 % WIDTH, p2 / WIDTH);
+
+		calcNorm();
+	}
+
+	void calcNorm()
+	{
+		float ux = b.x - a.x;
+		float uy = b.y - a.y;
+		float mag = std::sqrt(ux * ux + uy * uy);
+		if (mag != 0)
+		{
+			nx = uy / mag;
+			ny = ux / mag;
+		}
+		else
+		{
+			nx = ny = 0;
+		}
+	}
+
+	void setIndices(int v1_, int v2_)
+	{
+		v1 = v1_, v2 = v2_;
+	}
 };
 
 void subtract(char image[IMAGE_SIZE], int w, int h)
@@ -398,6 +443,73 @@ gotTip:
 	image[(y * WIDTH + x) * 3] = image[(y * WIDTH + x) * 3 + 1] = image[(y * WIDTH + x) * 3 + 2] = 255;
 }
 
+void createEdges(std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
+{
+	std::vector<int>* vertex;
+	edges.clear();
+	std::map<int, int> indices;
+
+	// Assuming edges are stored only once
+	for (unsigned int i = 0; i < graph.size(); ++i)
+	{
+		vertex = graph.at(i);
+		int pix = vertex->at(0);
+		indices.insert(pix, (int)i);
+		
+		for (unsigned int j = 3; j < vertex->size(); j += 3)
+			edges.push_back(edge(pix, vertex->at(j), j / 3 - 1));
+	}
+
+	for (unsigned int i = 0; i < edges.size(); ++i)
+		edges.at(i).setIndices(indices.at(edges.at(i).p1), indices.at(edges.at(i).p2));
+}
+
+void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
+{
+	float dist = WIDTH + HEIGHT;
+	float index = -1;
+	edge e;
+
+	for (unsigned int i = 0; i < edges.size(); ++i)
+	{
+		e = edges.at(i);
+		int d = (e.a.x - x) * e.nx + (e.a.y - y) * e.ny;
+		
+		if (d < dist)
+		{
+			dist = d;
+			index = i;
+		}
+	}
+
+	// Add new vertex and edges
+	std::vector<int>* vertex = new std::vector<int>;
+	graph.push_back(vertex);
+	e = edges.at(index);
+	x += dist * e.nx;
+	y += dist * e.ny;
+	int pix = y * WIDTH + x;
+	vertex->push_back(pix);
+	vertex->push_back((graph.at(e.v1)->at(1) + graph.at(e.v2)->at(1)) / 2);	// Weight is average of connecting vertices
+	vertex->push_back(1);	// Is starting point
+	vertex->push_back(e.p1);
+	vertex->push_back(graph.at(e.v1)->at(1));
+	vertex->push_back(0);
+	vertex->push_back(e.p2);
+	vertex->push_back(graph.at(e.v2)->at(1));
+	vertex->push_back(0);
+
+	edges.push_back(edge(pix, graph.at(e.v1)->at(1), 0));
+	edges.push_back(edge(pix, graph.at(e.v2)->at(1), 1));
+
+	// Delete previous edges
+	// Assuming edges are stored only once
+	int ind = (e.index + 1) * 3;
+	vertex = graph.at(e.v1);
+	vertex->erase(vertex->begin() + ind, vertex->begin() + ind + 3);
+	edges.erase(edges.begin() + index);
+}
+
 void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& graph, int& exception)
 {
 	// Read current image
@@ -427,16 +539,38 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	write_PPM(image, "test_hands/flood.ppm");
 
 	// Get fingertips
+	// Assuming immediate return if not exactly two fingers
 	int x, y;
 	getFingertip(image, x, y, w);
-	std::cout << x << ", " << y << std::endl;
+	//std::cout << x << ", " << y << std::endl;
 	write_PPM(image, "test_hands/f1.ppm");
-	getFingertip(image, x, y, w);
-	std::cout << x << ", " << y << std::endl;
+
+	int a, b;
+	getFingertip(image, a, b, w);
+	if (a == -1)
+	{
+		exception = -1;
+		return;
+	}
+	//std::cout << a << ", " << b << std::endl;
 	write_PPM(image, "test_hands/f2.ppm");
-	std::cin.ignore();
+
+	int c, d;
+	getFingertip(image, c, d, w);
+	if (c != -1)
+	{
+		exception = 1;
+		return;
+	}
+
+	// Add vertices to map
+	std::vector<edge> edges;
+	createEdges(graph, edges);
+	addVertex(x, y, graph, edges);
+	addVertex(a, b, graph, edges);
 
 	delete image;
+	exception = 0;
 }
 
 int main()
