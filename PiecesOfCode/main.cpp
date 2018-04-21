@@ -57,6 +57,204 @@ struct coord
 	coord(int x_, int y_) : x(x_), y(y_) {};
 };
 
+void subtract(char image[IMAGE_SIZE], int w, int h)
+{
+	char* sub = new char[IMAGE_SIZE];
+	for (unsigned int i = w; i < HEIGHT - w; ++i)
+	{
+		for (unsigned int j = h; j < WIDTH - h; ++j)
+		{
+			int index = (i * WIDTH + j) * 3;
+			int min = 765;	// 255 * 3
+			int minr = 255, ming = 255, minb = 255;
+			for (int k = -w; k <= w; ++k)
+			{
+				for (int l = -h; l <= h; ++l)
+				{
+					int temp = index + (k + l * WIDTH) * 3;
+					int r = image[index] - map[temp];
+					int g = image[index + 1] - map[temp + 1];
+					int b = image[index + 2] - map[temp + 2];
+					r = r > 0 ? r : -r;
+					g = g > 0 ? g : -g;
+					b = b > 0 ? b : -b;
+
+					if (min > r + g + b)
+					{
+						minr = r;
+						ming = g;
+						minb = b;
+						min = r + g + b;
+					}
+				}
+			}
+
+			sub[index] = minr;
+			sub[index + 1] = ming;
+			sub[index + 2] = minb;
+		}
+	}
+
+	for (unsigned int i = 0; i < WIDTH; ++i)
+	{
+		for (unsigned int j = 0; j < h; ++j)
+		{
+			sub[3 * (i + j * WIDTH)] = sub[3 * (i + j * WIDTH) + 1] = sub[3 * (i + j * WIDTH) + 2] = 0;
+			sub[(WIDTH * (HEIGHT - j) - i - 1) * 3] = sub[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 1] = sub[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 2] = 0;
+		}
+	}
+
+	for (unsigned int i = 0; i < HEIGHT; ++i)
+	{
+		for (unsigned int j = 0; j < w; ++j)
+		{
+			sub[(i * WIDTH + j) * 3] = sub[(i * WIDTH + j) * 2 + 1] = sub[(i * WIDTH + j) * 2 + 2] = 0;
+			sub[((i + 1) * WIDTH - j - 1) * 3] = sub[((i + 1) * WIDTH - j - 1) * 3 + 1] = sub[((i + 1) * WIDTH - j - 1) * 3 + 2] = 0;
+		}
+	}
+
+	delete image;
+	image = sub;
+}
+
+void denoise(char image[IMAGE_SIZE], int threshold)
+{
+	for (unsigned int i = 0; i < IMAGE_SIZE; i += 3)
+	{
+		if (image[i] + image[i + 1] + image[i + 2] > 3 * threshold)
+			setPixel(image, i, 255);
+		else
+			setPixel(image, i, 0);
+	}
+
+	for (unsigned int i = 1; i < HEIGHT - 1; ++i)
+	{
+		for (unsigned int j = 1; j < WIDTH - 1; ++j)
+		{
+			int index = (i * WIDTH + j) * 3;
+
+			if (image[index] + image[index + 1] + image[index + 2] == 0)
+			{
+				setPixel(image, index - WIDTH * 3 - 3, 0);
+				setPixel(image, index - WIDTH * 3, 0);
+				setPixel(image, index - WIDTH * 3 + 3, 0);
+				setPixel(image, index - 3, 0);
+				setPixel(image, index, 0);
+			}
+		}
+	}
+}
+
+void fill(char image[IMAGE_SIZE], int w, int h)
+{
+	char* fill = new char[IMAGE_SIZE];
+	for (unsigned int i = w; i < HEIGHT - w; ++i)
+	{
+		for (unsigned int j = h; j < WIDTH - h; ++j)
+		{
+			int index = (i * WIDTH + j) * 3;
+			setPixel(fill, index, 0);
+
+			for (int k = -w; k <= w; ++k)
+			{
+				for (int l = -h; l <= h; ++l)
+				{
+					int temp = index + (k + l * WIDTH) * 3;
+					if (image[temp])
+					{
+						setPixel(fill, index, 255);
+						goto go;
+					}
+				}
+			}
+
+		go:
+			continue;
+		}
+	}
+
+	delete image;
+	image = fill;
+
+	for (unsigned int i = 0; i < WIDTH; ++i)
+	{
+		for (unsigned int j = 0; j < h; ++j)
+		{
+			image[3 * (i + j * WIDTH)] = image[3 * (i + j * WIDTH) + 1] = image[3 * (i + j * WIDTH) + 2] = 0;
+			image[(WIDTH * (HEIGHT - j) - i - 1) * 3] = image[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 1] = image[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 2] = 0;
+		}
+	}
+
+	for (unsigned int i = 0; i < HEIGHT; ++i)
+	{
+		for (unsigned int j = 0; j < w; ++j)
+		{
+			image[(i * WIDTH + j) * 3] = image[(i * WIDTH + j) * 3 + 1] = image[(i * WIDTH + j) * 3 + 2] = 0;
+			image[((i + 1) * WIDTH - j - 1) * 3] = image[((i + 1) * WIDTH - j - 1) * 3 + 1] = image[((i + 1) * WIDTH - j - 1) * 3 + 2] = 0;
+		}
+	}
+}
+
+void flood(char image[IMAGE_SIZE])
+{
+	bool* hit = new bool[WIDTH * HEIGHT];
+	for (unsigned int i = 0; i < WIDTH * HEIGHT; ++i)
+		hit[i] = false;
+
+	for (unsigned int i = 0; i < HEIGHT; ++i)
+	{
+		int hitIndex = i * WIDTH;
+		int index = hitIndex * 3;
+		int x = hitIndex + WIDTH;
+		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex < x - 1)
+		{
+			hit[hitIndex] = true;
+			++hitIndex;
+			index += 3;
+		}
+
+		hitIndex = (i + 1) * WIDTH - 1;
+		index = hitIndex * 3;
+		x = hitIndex - WIDTH;
+		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex > x + 1)
+		{
+			hit[hitIndex] = true;
+			--hitIndex;
+			index -= 3;
+		}
+	}
+	for (unsigned int i = 0; i < WIDTH; ++i)
+	{
+		int hitIndex = i;
+		int index = hitIndex * 3;
+		int y = WIDTH * (HEIGHT - 1);
+		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex < y)
+		{
+			hit[hitIndex] = true;
+			hitIndex += WIDTH;
+			index += WIDTH * 3;
+		}
+
+		index = IMAGE_SIZE - (3 * (WIDTH - i));
+		hitIndex = index / 3;
+		y = WIDTH;
+		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex > y)
+		{
+			hit[hitIndex] = true;
+			hitIndex -= WIDTH;
+			index -= WIDTH * 3;
+		}
+	}
+
+	for (unsigned int i = 0; i < WIDTH * HEIGHT; ++i)
+	{
+		if (!hit[i])
+			setPixel(image, i * 3, 255);
+	}
+
+	delete hit;
+}
+
 void getFingertip(char image[IMAGE_SIZE], int& xpos, int& ypos, int borderSize)
 {
 	// Hands are white
@@ -208,205 +406,24 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	read_PPM(image, "test_hands/map_covered_hands.ppm");
 
 	// Complex subtraction
-	char* sub = new char[IMAGE_SIZE];
-	int w = 2, h = 2;
-	for (unsigned int i = w; i < HEIGHT - w; ++i)
-	{
-		for (unsigned int j = h; j < WIDTH - h; ++j)
-		{
-			int index = (i * WIDTH + j) * 3;
-			int min = 765;	// 255 * 3
-			int minr = 255, ming = 255, minb = 255;
-			for (int k = -w; k <= w; ++k)
-			{
-				for (int l = -h; l <= h; ++l)
-				{
-					int temp = index + (k + l * WIDTH) * 3;
-					int r = image[index] - map[temp];
-					int g = image[index + 1] - map[temp + 1];
-					int b = image[index + 2] - map[temp + 2];
-					r = r > 0 ? r : -r;
-					g = g > 0 ? g : -g;
-					b = b > 0 ? b : -b;
-					
-					if (min > r + g + b)
-					{
-						minr = r;
-						ming = g;
-						minb = b;
-						min = r + g + b;
-					}
-				}
-			}
-
-			sub[index] = minr;
-			sub[index + 1] = ming;
-			sub[index + 2] = minb;
-		}
-	}
-
-	for (unsigned int i = 0; i < WIDTH; ++i)
-	{
-		for (unsigned int j = 0; j < h; ++j)
-		{
-			sub[3 * (i + j * WIDTH)] = sub[3 * (i + j * WIDTH) + 1] = sub[3 * (i + j * WIDTH) + 2] = 0;
-			sub[(WIDTH * (HEIGHT - j) - i - 1) * 3] = sub[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 1] = sub[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 2] = 0;
-		}
-	}
-
-	for (unsigned int i = 0; i < HEIGHT; ++i)
-	{
-		for (unsigned int j = 0; j < w; ++j)
-		{
-			sub[(i * WIDTH + j) * 3] = sub[(i * WIDTH + j) * 2 + 1] = sub[(i * WIDTH + j) * 2 + 2] = 0;
-			sub[((i + 1) * WIDTH - j - 1 ) * 3] = sub[((i + 1) * WIDTH - j - 1) * 3 + 1] = sub[((i + 1) * WIDTH - j - 1) * 3 + 2] = 0;
-		}
-	}
-
-	delete image;
-	image = sub;
-
+	int w = 2;
+	int h = w;
+	subtract(image, w, h);
 	write_PPM(image, "test_hands/subtract.ppm");
 
 	// De-noise
 	int threshold = 15;
-	for (unsigned int i = 0; i < IMAGE_SIZE; i += 3)
-	{
-		if (image[i] + image[i + 1] + image[i + 2] > 3 * threshold)
-			setPixel(image, i, 255);
-		else
-			setPixel(image, i, 0);
-	}
-
-	for (unsigned int i = 1; i < HEIGHT - 1; ++i)
-	{
-		for (unsigned int j = 1; j < WIDTH - 1; ++j)
-		{
-			int index = (i * WIDTH + j) * 3;
-			
-			if (image[index] + image[index + 1] + image[index + 2] == 0)
-			{
-				setPixel(image, index - WIDTH * 3 - 3, 0);
-				setPixel(image, index - WIDTH * 3, 0);
-				setPixel(image, index - WIDTH * 3 + 3, 0);
-				setPixel(image, index - 3, 0);
-				setPixel(image, index, 0);
-			}
-		}
-	}
-
+	denoise(image, threshold);
 	write_PPM(image, "test_hands/denoise.ppm");
 
 	// Fill
 	for (int p = 0; p < 3; ++p)
-	{
-		char* fill = new char[IMAGE_SIZE];
-		for (unsigned int i = w; i < HEIGHT - w; ++i)
-		{
-			for (unsigned int j = h; j < WIDTH - h; ++j)
-			{
-				int index = (i * WIDTH + j) * 3;
-				setPixel(fill, index, 0);
-
-				for (int k = -w; k <= w; ++k)
-				{
-					for (int l = -h; l <= h; ++l)
-					{
-						int temp = index + (k + l * WIDTH) * 3;
-						if (image[temp])
-						{
-							setPixel(fill, index, 255);
-							goto go;
-						}
-					}
-				}
-
-			go:
-				continue;
-			}
-		}
-
-		delete image;
-		image = fill;
-
-		for (unsigned int i = 0; i < WIDTH; ++i)
-		{
-			for (unsigned int j = 0; j < h; ++j)
-			{
-				image[3 * (i + j * WIDTH)] = image[3 * (i + j * WIDTH) + 1] = image[3 * (i + j * WIDTH) + 2] = 0;
-				image[(WIDTH * (HEIGHT - j) - i - 1) * 3] = image[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 1] = image[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 2] = 0;
-			}
-		}
-
-		for (unsigned int i = 0; i < HEIGHT; ++i)
-		{
-			for (unsigned int j = 0; j < w; ++j)
-			{
-				image[(i * WIDTH + j) * 3] = image[(i * WIDTH + j) * 3 + 1] = image[(i * WIDTH + j) * 3 + 2] = 0;
-				image[((i + 1) * WIDTH - j - 1) * 3] = image[((i + 1) * WIDTH - j - 1) * 3 + 1] = image[((i + 1) * WIDTH - j - 1) * 3 + 2] = 0;
-			}
-		}
-	}
+		fill(image, w, h);
 
 	write_PPM(image, "test_hands/fill.ppm");
 
 	// Flood
-	bool* hit = new bool[WIDTH * HEIGHT];
-	for (unsigned int i = 0; i < WIDTH * HEIGHT; ++i)
-		hit[i] = false;
-
-	for (unsigned int i = 0; i < HEIGHT; ++i)
-	{
-		int hitIndex = i * WIDTH;
-		int index = hitIndex * 3;
-		int x = hitIndex + WIDTH;
-		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex < x - 1)
-		{
-			hit[hitIndex] = true;
-			++hitIndex;
-			index += 3;
-		}
-		
-		hitIndex = (i + 1) * WIDTH - 1;
-		index = hitIndex * 3;
-		x = hitIndex - WIDTH;
-		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex > x + 1)
-		{
-			hit[hitIndex] = true;
-			--hitIndex;
-			index -= 3;
-		}
-	}
-	for (unsigned int i = 0; i < WIDTH; ++i)
-	{
-		int hitIndex = i;
-		int index = hitIndex * 3;
-		int y = WIDTH * (HEIGHT - 1);
-		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex < y)
-		{
-			hit[hitIndex] = true;
-			hitIndex += WIDTH;
-			index += WIDTH * 3;
-		}
-
-		index = IMAGE_SIZE - (3 * (WIDTH - i));
-		hitIndex = index / 3;
-		y = WIDTH;
-		while (image[index] + image[index + 1] + image[index + 2] == 0 && hitIndex > y)
-		{
-			hit[hitIndex] = true;
-			hitIndex -= WIDTH;
-			index -= WIDTH * 3;
-		}
-	}
-	
-	for (unsigned int i = 0; i < WIDTH * HEIGHT; ++i)
-	{
-		if (!hit[i])
-			setPixel(image, i * 3, 255);
-	}
-
-	delete hit;
+	flood(image);
 	write_PPM(image, "test_hands/flood.ppm");
 
 	// Get fingertips
