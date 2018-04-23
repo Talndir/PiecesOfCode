@@ -13,6 +13,7 @@ const int HEIGHT = 682;	// 720
 const int IMAGE_SIZE = WIDTH * HEIGHT * 3;
 char* map;
 
+// Write PPM image
 void write_PPM(char image[IMAGE_SIZE], std::string name)
 {
 	std::ofstream ppm;
@@ -22,6 +23,7 @@ void write_PPM(char image[IMAGE_SIZE], std::string name)
 	ppm.close();
 }
 
+// Read PPM image
 void read_PPM(char image[IMAGE_SIZE], std::string name)
 {
 	std::ifstream ppm;
@@ -31,6 +33,7 @@ void read_PPM(char image[IMAGE_SIZE], std::string name)
 	ppm.close();
 }
 
+// Get image frm HDMI
 void get_image(volatile uint32_t* hdmi, char image[IMAGE_SIZE])
 {
 	// Assuming accessing the HDMI input automatically scrolls it to the next pixel
@@ -46,11 +49,13 @@ void get_image(volatile uint32_t* hdmi, char image[IMAGE_SIZE])
 	}
 }
 
+// Set all three channels to specified value
 void setPixel(char image[], int index, char value)
 {
 	image[index] = image[index + 1] = image[index + 2] = value;
 }
 
+// 2D integer coordinate
 struct coord
 {
 	int x;
@@ -59,6 +64,7 @@ struct coord
 	coord(int x_, int y_) : x(x_), y(y_) {};
 };
 
+// Edge between two vertices in graph
 struct edge
 {
 	coord a, b;
@@ -102,6 +108,7 @@ struct edge
 	}
 };
 
+// Subtract blank map with given image, match in an area
 void subtract(char image[IMAGE_SIZE], int w, int h)
 {
 	char* sub = new char[IMAGE_SIZE];
@@ -162,6 +169,7 @@ void subtract(char image[IMAGE_SIZE], int w, int h)
 	image = sub;
 }
 
+// Remove noise
 void denoise(char image[IMAGE_SIZE], int threshold)
 {
 	for (unsigned int i = 0; i < IMAGE_SIZE; i += 3)
@@ -190,6 +198,7 @@ void denoise(char image[IMAGE_SIZE], int threshold)
 	}
 }
 
+// Slightly enlarge and fill some gaps in white regions
 void fill(char image[IMAGE_SIZE], int w, int h)
 {
 	char* fill = new char[IMAGE_SIZE];
@@ -240,6 +249,7 @@ void fill(char image[IMAGE_SIZE], int w, int h)
 	}
 }
 
+// Fill unreachable areas such as holes
 void flood(char image[IMAGE_SIZE])
 {
 	bool* hit = new bool[WIDTH * HEIGHT];
@@ -300,6 +310,7 @@ void flood(char image[IMAGE_SIZE])
 	delete hit;
 }
 
+// Return first found fingertip, each run produces new fingertip
 void getFingertip(char image[IMAGE_SIZE], int& xpos, int& ypos, int borderSize)
 {
 	// Hands are white
@@ -443,6 +454,7 @@ gotTip:
 	image[(y * WIDTH + x) * 3] = image[(y * WIDTH + x) * 3 + 1] = image[(y * WIDTH + x) * 3 + 2] = 255;
 }
 
+// Create list of all edges in graph
 void createEdges(std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
 {
 	std::vector<int>* vertex;
@@ -464,6 +476,7 @@ void createEdges(std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
 		edges.at(i).setIndices(indices.at(edges.at(i).p1), indices.at(edges.at(i).p2));
 }
 
+// Bisect nearest edge to point specified
 void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
 {
 	float dist = WIDTH + HEIGHT;
@@ -510,6 +523,7 @@ void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<
 	edges.erase(edges.begin() + index);
 }
 
+// Take image and add start/end vertices to graph where fingertips are detected
 void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& graph, int& exception)
 {
 	// Read current image
