@@ -587,14 +587,24 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	exception = 0;
 }
 
+// Gets map from HDMI
+void get_map(volatile uint32_t* hdmi)
+{
+	// Read in map
+	map = new char[IMAGE_SIZE];
+	get_image(hdmi, map);
+}
+
 int main()
 {
+	volatile uint32_t* hdmi = new volatile uint32_t;
+
 	// Read in original map
+	//get_map(hdmi);
 	map = new char[IMAGE_SIZE];
 	read_PPM(map, "map.ppm");
 	
 	// Operate
-	volatile uint32_t* hdmi = new volatile uint32_t;
 	std::vector<std::vector<int>*> graph;
 	int exception;
 	detect_fingers(hdmi, graph, exception);
