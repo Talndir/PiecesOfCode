@@ -67,11 +67,11 @@ struct coord
 // Edge between two vertices in graph
 struct edge
 {
-	coord a, b;
-	int p1, p2;
-	int v1 = 0, v2 = 0;
-	int index;
-	float nx, ny;
+	coord a, b;			// x-y coord
+	int p1, p2;			// Pixel index
+	int v1 = 0, v2 = 0;	// Vertex index in graph
+	int index;			// Index of b in a's adjacency list (+1 *3 to get actual index)
+	float nx, ny;		// Normal vector (normalised)
 
 	edge()
 	{
@@ -461,7 +461,6 @@ void createEdges(std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
 	edges.clear();
 	std::map<int, int> indices;
 
-	// Assuming edges are stored only once
 	for (unsigned int i = 0; i < graph.size(); ++i)
 	{
 		vertex = graph.at(i);
@@ -502,9 +501,10 @@ void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<
 	x += dist * e.nx;
 	y += dist * e.ny;
 	int pix = y * WIDTH + x;
+	int weight = (graph.at(e.v1)->at(1) + graph.at(e.v2)->at(1)) / 2;
 	vertex->push_back(pix);
-	vertex->push_back((graph.at(e.v1)->at(1) + graph.at(e.v2)->at(1)) / 2);	// Weight is average of connecting vertices
-	vertex->push_back(1);	// Is starting point
+	vertex->push_back(weight);	// Weight is average of connecting vertices
+	vertex->push_back(1);		// Is starting point
 	vertex->push_back(e.p1);
 	vertex->push_back(graph.at(e.v1)->at(1));
 	vertex->push_back(0);
@@ -512,15 +512,45 @@ void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<
 	vertex->push_back(graph.at(e.v2)->at(1));
 	vertex->push_back(0);
 
+	edge e2;
+	int i = 0;
+	for (; i < edges.size(); ++i)
+	{
+		if (edges.at(i).p2 == e.p1 && edges.at(i).p1 == e.p2)
+		{
+			e2 = edges.at(i);
+			break;
+		}
+	}
+
 	edges.push_back(edge(pix, graph.at(e.v1)->at(1), 0));
 	edges.push_back(edge(pix, graph.at(e.v2)->at(1), 1));
 
-	// Delete previous edges
-	// Assuming edges are stored only once
+	edges.push_back(edge(e.p1, pix, e.index));
+	edges.push_back(edge(e2.p1, pix, e2.index));
+
+	// Overwrite previous edges
 	int ind = (e.index + 1) * 3;
 	vertex = graph.at(e.v1);
-	vertex->erase(vertex->begin() + ind, vertex->begin() + ind + 3);
-	edges.erase(edges.begin() + index);
+	vertex->at(ind) = pix;
+	vertex->at(ind + 1) = weight;
+	vertex->at(ind + 2) = 0;
+	ind = (e2.index + 1) * 3;
+	vertex->at(ind) = pix;
+	vertex->at(ind + 1) = weight;
+	vertex->at(ind + 2) = 0;
+
+	// Delete previous edges
+	if (e.index > e2.index)
+	{
+		edges.erase(edges.begin() + index);
+		edges.erase(edges.begin() + i);
+	}
+	else
+	{
+		edges.erase(edges.begin() + i);
+		edges.erase(edges.begin() + index);
+	}
 }
 
 // Take image and add start/end vertices to graph where fingertips are detected
@@ -528,25 +558,25 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 {
 	// Read current image
 	char* image = new char[IMAGE_SIZE];
-	//get_image(hdmi, image);
-	read_PPM(image, "test_hands/map_covered_hands.ppm");
+	get_image(hdmi, image);
+	//read_PPM(image, "test_hands/map_covered_hands.ppm");
 
 	// Complex subtraction
 	int w = 2;
 	int h = w;
 	subtract(image, w, h);
-	write_PPM(image, "test_hands/subtract.ppm");
+	//write_PPM(image, "test_hands/subtract.ppm");
 
 	// De-noise
 	int threshold = 15;
 	denoise(image, threshold);
-	write_PPM(image, "test_hands/denoise.ppm");
+	//write_PPM(image, "test_hands/denoise.ppm");
 
 	// Fill
 	for (int p = 0; p < 3; ++p)
 		fill(image, w, h);
 
-	write_PPM(image, "test_hands/fill.ppm");
+	//write_PPM(image, "test_hands/fill.ppm");
 
 	// Flood
 	flood(image);
@@ -557,7 +587,7 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	int x, y;
 	getFingertip(image, x, y, w);
 	//std::cout << x << ", " << y << std::endl;
-	write_PPM(image, "test_hands/f1.ppm");
+	//write_PPM(image, "test_hands/f1.ppm");
 
 	int a, b;
 	getFingertip(image, a, b, w);
@@ -567,7 +597,7 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 		return;
 	}
 	//std::cout << a << ", " << b << std::endl;
-	write_PPM(image, "test_hands/f2.ppm");
+	//write_PPM(image, "test_hands/f2.ppm");
 
 	int c, d;
 	getFingertip(image, c, d, w);
@@ -597,16 +627,16 @@ void get_map(volatile uint32_t* hdmi)
 
 int main()
 {
-	volatile uint32_t* hdmi = new volatile uint32_t;
+	volatile uint32_t* hdmi = new volatile uint32_t;	// HDMI in
 
 	// Read in original map
-	//get_map(hdmi);
-	map = new char[IMAGE_SIZE];
-	read_PPM(map, "map.ppm");
+	get_map(hdmi);
+	//map = new char[IMAGE_SIZE];
+	//read_PPM(map, "map.ppm");
 	
 	// Operate
-	std::vector<std::vector<int>*> graph;
-	int exception;
+	std::vector<std::vector<int>*> graph;				// Graph
+	int exception;										// Exception
 	detect_fingers(hdmi, graph, exception);
 
 	delete map;
