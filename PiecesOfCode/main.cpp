@@ -69,7 +69,7 @@ struct edge
 {
 	coord a, b;			// x-y coord
 	int p1, p2;			// Pixel index
-	int v1 = 0, v2 = 0;	// Vertex index in graph
+	int v1, v2;	// Vertex index in graph
 	int index;			// Index of b in a's adjacency list (+1 *3 to get actual index)
 	float nx, ny;		// Normal vector (normalised)
 
@@ -82,6 +82,7 @@ struct edge
 	{
 		a = coord(p1 % WIDTH, p1 / WIDTH);
 		b = coord(p2 % WIDTH, p2 / WIDTH);
+		v1 = v2 = 0;
 
 		calcNorm();
 	}
