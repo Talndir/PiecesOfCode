@@ -1,18 +1,24 @@
+//#define DEBUG
+
 #include <stdint.h>
-#include <vector>
+#include <queue>
+#include <map>
+#include <algorithm>
+
+#ifdef DEBUG
 #include <fstream>
 #include <iostream>
-#include <queue>
 #include <sstream>
-#include <map>
+#endif
 
 #define SQRT2_RECIP 0.70710678118
 
-const int WIDTH = 1024;	// 1280
-const int HEIGHT = 682;	// 720
-const int IMAGE_SIZE = WIDTH * HEIGHT * 3;
+const unsigned int WIDTH = 1024;	// 1280
+const unsigned int HEIGHT = 682;	// 720
+const unsigned int IMAGE_SIZE = WIDTH * HEIGHT * 3;
 char* map;
 
+#ifdef DEBUG
 // Write PPM image
 void write_PPM(char image[IMAGE_SIZE], std::string name)
 {
@@ -32,6 +38,7 @@ void read_PPM(char image[IMAGE_SIZE], std::string name)
 	ppm.read(image, IMAGE_SIZE);
 	ppm.close();
 }
+#endif
 
 // Get image frm HDMI
 void get_image(volatile uint32_t* hdmi, char image[IMAGE_SIZE])
@@ -150,7 +157,7 @@ void subtract(char image[IMAGE_SIZE], int w, int h)
 
 	for (unsigned int i = 0; i < WIDTH; ++i)
 	{
-		for (unsigned int j = 0; j < h; ++j)
+		for (int j = 0; j < h; ++j)
 		{
 			sub[3 * (i + j * WIDTH)] = sub[3 * (i + j * WIDTH) + 1] = sub[3 * (i + j * WIDTH) + 2] = 0;
 			sub[(WIDTH * (HEIGHT - j) - i - 1) * 3] = sub[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 1] = sub[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 2] = 0;
@@ -159,7 +166,7 @@ void subtract(char image[IMAGE_SIZE], int w, int h)
 
 	for (unsigned int i = 0; i < HEIGHT; ++i)
 	{
-		for (unsigned int j = 0; j < w; ++j)
+		for (int j = 0; j < w; ++j)
 		{
 			sub[(i * WIDTH + j) * 3] = sub[(i * WIDTH + j) * 2 + 1] = sub[(i * WIDTH + j) * 2 + 2] = 0;
 			sub[((i + 1) * WIDTH - j - 1) * 3] = sub[((i + 1) * WIDTH - j - 1) * 3 + 1] = sub[((i + 1) * WIDTH - j - 1) * 3 + 2] = 0;
@@ -233,7 +240,7 @@ void fill(char image[IMAGE_SIZE], int w, int h)
 
 	for (unsigned int i = 0; i < WIDTH; ++i)
 	{
-		for (unsigned int j = 0; j < h; ++j)
+		for (int j = 0; j < h; ++j)
 		{
 			image[3 * (i + j * WIDTH)] = image[3 * (i + j * WIDTH) + 1] = image[3 * (i + j * WIDTH) + 2] = 0;
 			image[(WIDTH * (HEIGHT - j) - i - 1) * 3] = image[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 1] = image[(WIDTH * (HEIGHT - j) - i - 1) * 3 + 2] = 0;
@@ -242,7 +249,7 @@ void fill(char image[IMAGE_SIZE], int w, int h)
 
 	for (unsigned int i = 0; i < HEIGHT; ++i)
 	{
-		for (unsigned int j = 0; j < w; ++j)
+		for (int j = 0; j < w; ++j)
 		{
 			image[(i * WIDTH + j) * 3] = image[(i * WIDTH + j) * 3 + 1] = image[(i * WIDTH + j) * 3 + 2] = 0;
 			image[((i + 1) * WIDTH - j - 1) * 3] = image[((i + 1) * WIDTH - j - 1) * 3 + 1] = image[((i + 1) * WIDTH - j - 1) * 3 + 2] = 0;
@@ -456,38 +463,44 @@ gotTip:
 }
 
 // Create list of all edges in graph
-void createEdges(std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
+void createEdges(int* graph[], edge edges[])
 {
-	std::vector<int>* vertex;
-	edges.clear();
+	int* vertex;
+	int size = sizeof(graph) / sizeof(int);
+	edge* edges2 = new edge[size * size];
 	std::map<int, int> indices;
+	int index = 0;
 
-	for (unsigned int i = 0; i < graph.size(); ++i)
+	for (unsigned int i = 0; i < size; ++i)
 	{
-		vertex = graph.at(i);
-		int pix = vertex->at(0);
-		indices.insert(pix, (int)i);
-		
-		for (unsigned int j = 3; j < vertex->size(); j += 3)
-			edges.push_back(edge(pix, vertex->at(j), j / 3 - 1));
+		vertex = graph[i];
+		int pix = vertex[0];
+		indices.insert(std::make_pair(pix, (int)i));
+
+		for (unsigned int j = 3; j < sizeof(vertex) / sizeof(int); j += 3)
+			edges2[index++] = edge(pix, vertex[j], j / 3 - 1);
 	}
 
-	for (unsigned int i = 0; i < edges.size(); ++i)
-		edges.at(i).setIndices(indices.at(edges.at(i).p1), indices.at(edges.at(i).p2));
+	delete edges;
+	edges = new edge[index];
+	edges = edges2;
+	for (unsigned int i = 0; i < index; ++i)
+		edges[i].setIndices(indices.at(edges[i].p1), indices.at(edges[i].p2));
 }
 
 // Bisect nearest edge to point specified
-void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<edge> edges)
+void addVertex(int x, int y, int* graph[], edge edges[])
 {
 	float dist = WIDTH + HEIGHT;
-	float index = -1;
+	int index = -1;
 	edge e;
+	int size = sizeof(edges) / sizeof(edge);
 
-	for (unsigned int i = 0; i < edges.size(); ++i)
+	for (unsigned int i = 0; i < size; ++i)
 	{
-		e = edges.at(i);
-		int d = (e.a.x - x) * e.nx + (e.a.y - y) * e.ny;
-		
+		e = edges[i];
+		float d = (e.a.x - x) * e.nx + (e.a.y - y) * e.ny;
+
 		if (d < dist)
 		{
 			dist = d;
@@ -496,71 +509,73 @@ void addVertex(int x, int y, std::vector<std::vector<int>*>& graph, std::vector<
 	}
 
 	// Add new vertex and edges
-	std::vector<int>* vertex = new std::vector<int>;
-	graph.push_back(vertex);
-	e = edges.at(index);
+	int gsize = sizeof(graph) / sizeof(int*);
+	int *(*g2) = new int*[gsize + 1];
+	std::copy(graph, graph + gsize, g2);
+	delete graph;
+	graph = g2;
+	int* vertex = new int[9];
+	graph[gsize] = vertex;
+	e = edges[index];
 	x += dist * e.nx;
 	y += dist * e.ny;
 	int pix = y * WIDTH + x;
-	int weight = (graph.at(e.v1)->at(1) + graph.at(e.v2)->at(1)) / 2;
-	vertex->push_back(pix);
-	vertex->push_back(weight);	// Weight is average of connecting vertices
-	vertex->push_back(1);		// Is starting point
-	vertex->push_back(e.p1);
-	vertex->push_back(graph.at(e.v1)->at(1));
-	vertex->push_back(0);
-	vertex->push_back(e.p2);
-	vertex->push_back(graph.at(e.v2)->at(1));
-	vertex->push_back(0);
+	int weight = (graph[e.v1][1] + graph[e.v2][1]) / 2;
+	vertex[0] = pix;
+	vertex[1] = weight;	// Weight is average of connecting vertices
+	vertex[2] = 1;		// Is starting point
+	vertex[3] = e.p1;
+	vertex[4] = graph[e.v1][1];
+	vertex[5] = 0;
+	vertex[6] = e.p2;
+	vertex[7] = graph[e.v2][1];
+	vertex[8] = 0;
 
 	edge e2;
 	int i = 0;
-	for (; i < edges.size(); ++i)
+	for (; i < size; ++i)
 	{
-		if (edges.at(i).p2 == e.p1 && edges.at(i).p1 == e.p2)
+		if (edges[i].p2 == e.p1 && edges[i].p1 == e.p2)
 		{
-			e2 = edges.at(i);
+			e2 = edges[i];
 			break;
 		}
 	}
 
-	edges.push_back(edge(pix, graph.at(e.v1)->at(1), 0));
-	edges.push_back(edge(pix, graph.at(e.v2)->at(1), 1));
-
-	edges.push_back(edge(e.p1, pix, e.index));
-	edges.push_back(edge(e2.p1, pix, e2.index));
-
 	// Overwrite previous edges
-	int ind = (e.index + 1) * 3;
-	vertex = graph.at(e.v1);
-	vertex->at(ind) = pix;
-	vertex->at(ind + 1) = weight;
-	vertex->at(ind + 2) = 0;
-	ind = (e2.index + 1) * 3;
-	vertex->at(ind) = pix;
-	vertex->at(ind + 1) = weight;
-	vertex->at(ind + 2) = 0;
+	edge* edges2 = new edge[size + 2];
+	std::copy(edges, edges + size, edges2);
+	delete edges;
+	edges = edges2;
 
-	// Delete previous edges
-	if (e.index > e2.index)
-	{
-		edges.erase(edges.begin() + index);
-		edges.erase(edges.begin() + i);
-	}
-	else
-	{
-		edges.erase(edges.begin() + i);
-		edges.erase(edges.begin() + index);
-	}
+	edges[index] = edge(pix, graph[e.v1][1], 0);
+	edges[i] = edge(pix, graph[e.v2][1], 1);
+	edges[size] = edge(e.p1, pix, e.index);
+	edges[size + 1] = edge(e2.p1, pix, e2.index);
+
+	int ind = (e.index + 1) * 3;
+	vertex = graph[e.v1];
+	vertex[ind] = pix;
+	vertex[ind + 1] = weight;
+	vertex[ind + 2] = 0;
+	ind = (e2.index + 1) * 3;
+	vertex[ind] = pix;
+	vertex[ind + 1] = weight;
+	vertex[ind + 2] = 0;
 }
 
 // Take image and add start/end vertices to graph where fingertips are detected
-void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& graph, int& exception)
+void detect_fingers(volatile uint32_t* hdmi, int* graph[], int& exception)
 {
 	// Read current image
 	char* image = new char[IMAGE_SIZE];
 	get_image(hdmi, image);
-	//read_PPM(image, "test_hands/map_covered_hands.ppm");
+	
+#ifdef DEBUG
+	delete image;
+	image = new char[IMAGE_SIZE];
+	read_PPM(image, "test_hands/map_covered_hands.ppm");
+#endif
 
 	// Complex subtraction
 	int w = 2;
@@ -571,24 +586,34 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	// De-noise
 	int threshold = 15;
 	denoise(image, threshold);
-	//write_PPM(image, "test_hands/denoise.ppm");
+
+#ifdef DEBUG
+	write_PPM(image, "test_hands/denoise.ppm");
+#endif
 
 	// Fill
 	for (int p = 0; p < 3; ++p)
 		fill(image, w, h);
 
-	//write_PPM(image, "test_hands/fill.ppm");
+#ifdef DEBUG
+	write_PPM(image, "test_hands/fill.ppm");
+#endif
 
 	// Flood
 	flood(image);
+#ifdef DEBUG
 	write_PPM(image, "test_hands/flood.ppm");
+#endif
 
 	// Get fingertips
 	// Assuming immediate return if not exactly two fingers
 	int x, y;
 	getFingertip(image, x, y, w);
-	//std::cout << x << ", " << y << std::endl;
-	//write_PPM(image, "test_hands/f1.ppm");
+
+#ifdef DEBUG
+	std::cout << x << ", " << y << std::endl;
+	write_PPM(image, "test_hands/f1.ppm");
+#endif
 
 	int a, b;
 	getFingertip(image, a, b, w);
@@ -597,8 +622,11 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 		exception = -1;
 		return;
 	}
-	//std::cout << a << ", " << b << std::endl;
-	//write_PPM(image, "test_hands/f2.ppm");
+
+#ifdef DEBUG
+	std::cout << a << ", " << b << std::endl;
+	write_PPM(image, "test_hands/f2.ppm");
+#endif
 
 	int c, d;
 	getFingertip(image, c, d, w);
@@ -609,7 +637,7 @@ void detect_fingers(volatile uint32_t* hdmi, std::vector<std::vector<int>*>& gra
 	}
 
 	// Add vertices to map
-	std::vector<edge> edges;
+	edge* edges = nullptr;
 	createEdges(graph, edges);
 	addVertex(x, y, graph, edges);
 	addVertex(a, b, graph, edges);
@@ -632,12 +660,15 @@ int main()
 
 	// Read in original map
 	get_map(hdmi);
-	//map = new char[IMAGE_SIZE];
-	//read_PPM(map, "map.ppm");
-	
+#ifdef DEBUG
+	delete map;
+	map = new char[IMAGE_SIZE];
+	read_PPM(map, "map.ppm");
+#endif
+
 	// Operate
-	std::vector<std::vector<int>*> graph;				// Graph
-	int exception;										// Exception
+	int*(*graph) = nullptr;						// Graph
+	int exception;								// Exception
 	detect_fingers(hdmi, graph, exception);
 
 	delete map;
